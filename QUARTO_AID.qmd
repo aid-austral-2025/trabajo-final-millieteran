@@ -1,0 +1,891 @@
+---
+title: "Trabajo Práctico AID"
+author: "Milagros Terán"
+format: html
+editor: visual
+---
+
+# Introducción
+
+A lo largo de este trabajo, se muestra un análisis realizado sobre una base de datos obtenida del sitio web Kaggle, en el que se analizan terremotos y su características, así como la presencia o ausencia de tsunamis una vez sucedidos los terremotos. El siguiente análisis, se va a focalizar en la variable objetivo de Tsunami.
+
+## Limpieza de Datos
+
+Se comenzó con la limpieza de los datos del dataset llamado Earthquake_data_tsunami. El mismo es un archivo csv.
+
+Los pasos que se siguieron fueron los siguientes:
+
+1.  Cargar el dataset → utilizando read_delim
+
+```{r}
+#| label: Packages
+#| message: false
+#| warning: false
+#| include: false
+#| paged-print: false
+
+# Si no se tiene estos paquetes instalados, descomentá la línea de abajo:
+# install.packages(c("readr", "dplyr", "ggplot2", "leaflet", "sf","leaflet.extras"))
+
+# Carga de librerías necesarias
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(leaflet)
+library(sf)
+library(knitr)
+library(kableExtra)
+library(leaflet)
+library(dplyr)
+library(leaflet.extras)
+library(htmltools)
+
+
+```
+
+```{r}
+#| label: Carga
+#| message: false
+#| warning: false
+#| include: false
+#| paged-print: false
+datos <- read_delim("earthquake_data_tsunami.csv", delim = ",")
+```
+
+2.  Usar str() → Para ver qué tipo de datos tiene cada columna.
+
+    A partir de la salida del str(), se observó que todos los datos están clasificados como numéricos. Habiendo visto las variables en el dataset, y leído sus descripciones, se decidió que más adelante, se convierta a las correspondientes variables en factores para su posterior análisis.
+
+```{r}
+#| label: str
+#| message: false
+#| warning: false
+#| include: false
+#| paged-print: false
+#Estructura y tipos de variable
+str(datos)
+```
+
+3.  Revisar valores faltantes (NA) → colSums(is.na(datos))
+
+```{r}
+#| label: NAs
+#| message: false
+#| warning: false
+#| include: false
+#| paged-print: false
+#Verficación de presencia de valores NA en los datos
+colSums(is.na(datos))
+```
+
+Se confirma, que no hay valores NA en el dataset.
+
+4.  Revisar valores fuera de rango → summarise() con los límites proporcionados.
+
+```{r}
+#| label: rangos
+#| message: false
+#| warning: false
+#| include: false
+#| paged-print: false
+#Verificación de valores fuera de rango por variable
+
+datos %>%
+  summarise(
+    NA_magnitude = sum(magnitude < 6.5 | magnitude > 9.1),
+    NA_cdi       = sum(cdi < 0 | cdi > 9),
+    NA_mmi       = sum(mmi < 1 | mmi > 9),
+    NA_sig       = sum(sig < 650 | sig > 2910),
+    NA_nst       = sum(nst < 0 | nst > 934),
+    NA_dmin      = sum(dmin < 0.0 | dmin > 17.7),
+    NA_gap       = sum(gap < 0.0 | gap > 239.0),
+    NA_depth     = sum(depth < 2.7 | depth > 670.8),
+    NA_latitude  = sum(latitude < -61.85 | latitude > 71.63),
+    NA_longitude = sum(longitude < -179.97 | longitude > 179.66),
+    NA_year      = sum(Year < 2001 | Year > 2022),
+    NA_month     = sum(Month < 1 | Month > 12)
+  )
+```
+
+Se confirma, que no hay valores fuera de los rangos establecidos en el dataset.
+
+5.  Limpiar los datos → Eliminar o corregir registros con errores. En este caso, este paso no fue necesario debido a que no había valores fuera de rango ni faltantes.
+
+6.  Convertir tipos de variables → Las variables MMI, CDI, Tsunami y Month fueron convertidas a factor.
+
+Las variables *MMI y CDI*, se convierten porque representan niveles de intensidad en una escala jerárquica. Esto hace que se reconozca su orden y no se traten simplemente como números continuos.
+
+Se convierte en factor nominal a la variable *Month*, porque al pasarlos a factor con etiquetas, se evita que R los interprete como valores cuantitativos y facilita la visualización y el análisis de frecuencias.
+
+Por último, la variable dicotómica *Tsunami*, se convierte en factor con etiquetas (“Sí”/“No”) para que los gráficos y tablas sean más interpretables y para que los modelos estadísticos lo traten como una variable binaria en lugar de como un número.
+
+```{r}
+#| label: a factor
+#| message: false
+#| warning: false
+#| include: false
+#| paged-print: false
+# Convertir a factor
+datos <- datos %>%
+  mutate(
+    mmi = factor(mmi, levels = 1:9, ordered = TRUE),
+    cdi = factor(cdi, levels = 0:9, ordered = TRUE),
+    
+    # Convertir mes a factor nominal
+    Month = factor(Month, levels = 1:12, labels = c("Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic")),
+    
+    # Convertir tsunami a factor binario
+    tsunami = factor(tsunami, levels = c(0, 1), labels = c("No", "Sí"))
+  )
+```
+
+## Exploración de los Datos
+
+Se comenzó esta parte del análisis, investigando la cantidad de observaciones y variables presentes en el dataset.
+
+Se observaron 782 observaciones y 13 variables.
+
+Los nombres de las variables son:
+
+-   Magnitude: Magnitud del terremoto (escala Ritcher)
+
+-   CDI: Intensidad percibida por la comunidad
+
+-   MMI: Intensidad instrumental
+
+-   SIG: Puntaje de significancia del evento
+
+-   NST: Número de estaciones sísmicas que registraron el evento
+
+-   DMIN: Distancia a la estación sísmica más cercana (en grados)
+
+-   GAP: Brecha azimutal entre estaciones (en grados)
+
+-   Depth: Profundidad focal del terremoto (en km)
+
+-   Latitude: Latitud del epicentro (WGS84)
+
+-   Longitude: Longitud del epicentro (WGS84)
+
+-   Year: Año de ocurrencia del evento
+
+-   Month: Mes de ocurrencia del evento
+
+-   Tsunami: Presencia de tsunami
+
+### Exploración general del dataset
+
+```{r}
+#| label: Exploracion1
+#| message: false
+#| warning: false
+#| include: false
+#| paged-print: false
+dim(datos)       # dimensiones, 782 observaciones y 13 variables
+nrow(datos)      # cantidad de filas
+ncol(datos)      # cantidad de columnas
+colnames(datos)  # nombres de variables
+str(datos)       # estructura, se verificó que las variables tienen el tipo correcto
+```
+
+Se observan 782 observaciones y 13 variables. También se puede confirmar, que están correctamente clasificadas: CDI, MMI, Month y Tsunami son factores.
+
+```{r}
+#| label: summ datos
+#| echo: true
+#| message: false
+#| warning: false
+#| paged-print: false
+# Resumen estadístico general
+summary(datos)
+```
+
+Este análisis inicial, ofrece una visión general de la distribución de las variables. En las siguientes secciones se profundiza en el análisis estadístico de cada variable, y en la relación de cada una con la ocurrencia de tsunamis, mediante pruebas estadísticas y visualizaciones correspondientes.
+
+**Magnitude**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: summary magnitude
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+# Magnitud del sismo
+summary(datos$magnitude)   
+```
+
+```{r}
+#| label: grafico magnitude
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+hist(datos$magnitude, main="Distribución de la magnitud del sismo", 
+     xlab="Magnitud (Richter)", col="#A7C7E7")
+boxplot(datos$magnitude, main="Boxplot de la magnitud del sismo", 
+        ylab="Magnitud (Richter)", col="#B5EAD7")
+```
+
+*Análisis*: Se observa que la mayoría de los eventos tienen magnitudes moderadas, concentradas entre 6.5 y 6.8 aproximadamente. La media es ligeramente superior a la mediana, lo que sugiere una distribución asimétrica positiva, la cual se refuerza al ver los gráficos, con algunos eventos de magnitud elevada que actúan como outliers.
+
+**Depth**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: summ depth
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+# Profundidad del hipocentro
+summary(datos$depth) 
+```
+
+```{r}
+#| label: graficos depth
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+hist(datos$depth, main="Distribución de la profundidad del hipocentro", 
+     xlab="Profundidad (km)", col="#A7C7E7")
+boxplot(datos$depth, main="Boxplot de la profundidad del hipocentro", 
+        ylab="Profundidad (km)", col="#B5EAD7")
+```
+
+*Análisis*: Se observa que su distribución muestra una fuerte concentración de eventos a baja profundidad: el 50% de los sismos ocurren por debajo de los 26.3 km, con un mínimo de 2.7 km. Sin embargo, la media asciende a 75.88 km, lo que indica una asimetría a la derecha causada por varios eventos profundos. El histograma refleja esta concentración en bajas profundidades y una larga cola hacia la derecha, mientras que el boxplot confirma la presencia de varios outliers profundos.
+
+**Dmin**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: summ dmin
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+# Distancia al sismógrafo más cercano
+summary(datos$dmin)  
+```
+
+```{r}
+#| label: grafico dmin
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+hist(datos$dmin, main="Distribución de la distancia mínima a estación", 
+     xlab="Distancia mínima (grados)", col="#A7C7E7")
+boxplot(datos$dmin, main="Boxplot de la distancia mínima a estación", 
+        ylab="Distancia mínima (grados)", col="#B5EAD7")
+```
+
+*Análisis*: Se observa una fuerte concentración de valores en cero: tanto el mínimo, el primer cuartil como la mediana son 0. Esto indica que en muchos casos el epicentro coincide con una estación o está muy cerca. Sin embargo, la media llega a 1.33 grados y el valor máximo es 17.65, lo que confirma una asimetría positiva. El histograma confirma esta concentración extrema en valores bajos, mientras que el boxplot muestra varios outliers que podrían influir en la calidad del registro.
+
+**Gap**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: summ gap
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+# Gap azimutal entre estaciones
+summary(datos$gap)  
+```
+
+```{r}
+#| label: grafico gap
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+hist(datos$gap, main="Distribución del gap azimutal", 
+     xlab="Gap azimutal (grados)", col="#A7C7E7")
+boxplot(datos$gap, main="Boxplot del gap azimutal", 
+        ylab="Gap azimutal (grados)", col="#B5EAD7")
+```
+
+*Análisis*: Esta variable refleja la cobertura angular del evento de las estaciones: a valores bajos, mejor cobertura, mientras que valores altos pueden indicar zonas mal monitoreadas. El 50% de los datos tuvieron menos de 20° y la media es de 25°, con un rango que va desde 0° hasta 239°. La distribución es asimétrica positiva, con la mayoría de los eventos concentrados por debajo de los 50°, como se observa en el histograma. El boxplot muestra varios outliers con valores elevados, lo que podría afectar la precisión en la localización del epicentro.
+
+**Latitude**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: summ latitude
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+# Latitud del epicentro
+summary(datos$latitude)
+```
+
+```{r}
+#| label: grafico latitude
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+hist(datos$latitude, main="Distribución de la latitud del epicentro", 
+     xlab="Latitud (WGS84)", col="#A7C7E7")
+boxplot(datos$latitude, main="Boxplot de la latitud del epicentro", 
+        ylab="Latitud (WGS84)", col="#B5EAD7")
+```
+
+*Análisis*: La variable latitud de los epicentros presenta una distribución amplia, abarcando desde aproximadamente −62° hasta 72°, lo que indica que los eventos sísmicos del conjunto de datos ocurrieron en diversas regiones del planeta, tanto en el hemisferio sur como en el norte. El valor medio (aprox. 3.54°) y la mediana (aprox. −2.57°) sugieren una ligera concentración hacia el ecuador, reforzada por el histograma que muestra mayor densidad de eventos en latitudes cercanas a cero. El boxplot confirma esta dispersión simétrica, sin presencia de valores atípicos extremos.
+
+**Longitude**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: summ longitude
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+# Longitud del epicentro
+summary(datos$longitude) 
+```
+
+```{r}
+#| label: grafico longitude
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+hist(datos$longitude, main="Distribución de la longitud del epicentro", 
+     xlab="Longitud (WGS84)", col="#A7C7E7")
+boxplot(datos$longitude, main="Boxplot de la longitud del epicentro", 
+        ylab="Longitud (WGS84)", col="#B5EAD7")
+```
+
+*Análisis*: La variable longitud de los epicentros muestra una distribución amplia, que abarca desde aproximadamente −180° hasta +180°, lo que indica que los eventos sísmicos se registraron en todo el globo, tanto en zonas del hemisferio occidental como oriental. La mediana (aprox. 109.43°) y la media (aprox. 52.61°) sugieren una mayor concentración de eventos en regiones del este. El histograma revela una distribución bimodal, con acumulaciones tanto en valores negativos como positivos, mientras que el boxplot confirma la dispersión sin presencia de valores atípicos extremos.
+
+**Sig**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: summ sig
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+# Puntuación de significancia del evento
+summary(datos$sig)   
+```
+
+```{r}
+#| label: graf sig
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+hist(datos$sig, main="Distribución de la puntuación de significancia", 
+     xlab="Significancia", col="#A7C7E7")
+boxplot(datos$sig, main="Boxplot de la puntuación de significancia", 
+        ylab="Significancia", col="#B5EAD7")
+```
+
+*Análisis*: La variable significancia (sig) presenta una distribución muy asimétrica hacia la derecha, con valores que oscilan entre 650 y 2910. El histograma muestra una concentración de eventos en el rango bajo (650–1000), mientras que el boxplot muestra múltiples valores atípicos en el extremo superior. Esta dispersión sugiere que, aunque la mayoría de los eventos tienen una significancia moderada, existen algunos casos que podrían corresponder a sismos de gran impacto o relevancia geofísica.
+
+**NST**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: summ nst
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+# Cantidad de estaciones que registraron el evento
+summary(datos$nst)  
+```
+
+```{r}
+#| label: graf nst
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+hist(datos$nst, main="Distribución de la cantidad de estaciones", 
+     xlab="Número de estaciones", col="#A7C7E7")
+boxplot(datos$nst, main="Boxplot de la cantidad de estaciones", 
+        ylab="Número de estaciones", col="#B5EAD7")
+```
+
+*Análisis*: La variable nst presenta una distribución altamente dispersa, con valores que van desde 0 hasta 934. La mediana (140) y la media (aprox. 230) indican que, aunque muchos eventos fueron registrados por una cantidad moderada de estaciones, existen casos con cobertura instrumental muy elevada. El histograma muestra una concentración de eventos con pocas estaciones, mientras que el boxplot revela una asimetría hacia la derecha y la presencia de valores extremos. Esta variabilidad puede estar asociada a la ubicación geográfica del epicentro, ya que los eventos en zonas oceánicas o remotas suelen contar con menor densidad de estaciones cercanas.
+
+**Year**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: summ year
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+# Año del evento
+summary(datos$Year) 
+```
+
+```{r}
+#| label: graf year
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+hist(datos$Year, main="Distribución de los años de ocurrencia", 
+     xlab="Año", col="#A7C7E7")
+boxplot(datos$Year, main="Boxplot de los años de ocurrencia", 
+        ylab="Año", col="#B5EAD7")
+```
+
+*Análisis*: La variable Year refleja la distribución en el tiempo de los eventos sísmicos registrados entre 2001 y 2022. El histograma muestra una frecuencia relativamente constante a lo largo del tiempo, con una leve concentración de eventos entre los años 2014 y 2016. El boxplot confirma esta dispersión sin presencia de valores atípicos, lo que sugiere que los registros están bien distribuidos a lo largo de ese período de tiempo.
+
+**MMI**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: table mmi
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+#Factores ordinales
+#MMI
+table(datos$mmi)
+prop.table(table(datos$mmi))
+```
+
+```{r}
+#| label: barplot mmi
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+barplot(table(datos$mmi),
+        main = "Distribución de MMI",
+        xlab = "Nivel de intensidad (MMI)",
+        ylab = "Frecuencia",
+        col = "#A7C7E7")
+```
+
+*Análisis*: La variable MMI representa la intensidad instrumental de los eventos sísmicos, medida en una escala ordinal de 1 a 9. El gráfico muestra una distribución claramente sesgada hacia los niveles altos, con mayor frecuencia en los valores 6 y 7. Esto indica que la mayoría de los sismos del conjunto de datos fueron percibidos con intensidad considerable. Los niveles bajos (1 a 3) son poco frecuentes, lo que sugiere que el dataset está compuesto principalmente por eventos importantes desde el punto de vista instrumental.
+
+**CDI**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: table cdi
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+#CDI
+table(datos$cdi)
+prop.table(table(datos$cdi))
+```
+
+```{r}
+#| label: graf cdi
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+barplot(table(datos$cdi),
+        main = "Distribución de CDI",
+        xlab = "Nivel de intensidad (CDI)",
+        ylab = "Frecuencia",
+        col = "#A7C7E7")
+```
+
+*Análisis*: La variable CDI representa la intensidad percibida por la población durante los eventos sísmicos, en una escala ordinal de 0 a 9. El histograma muestra una distribución con una marcada concentración en el nivel 0 (27% de los casos), lo que indica que una gran proporción de eventos no fueron percibidos por la comunidad. Sin embargo, también se observa una presencia significativa en niveles intermedios como 5, 6 y 7, que en conjunto representan más del 35% del total. Esta dispersión sugiere que, aunque muchos sismos fueron instrumentales, una parte considerable tuvo impacto perceptible.
+
+**Month**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: table month
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+#Factores nominales
+#Month
+table(datos$Month)
+prop.table(table(datos$Month))
+```
+
+```{r}
+#| label: graf month
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+barplot(table(datos$Month), main="Eventos por mes", col="#A7C7E7")
+```
+
+*Análisis*: El histograma muestra una distribución relativamente equilibrada a lo largo del año, aunque se observan picos en septiembre y noviembre (80 eventos cada uno), y una menor frecuencia en junio (42 eventos). Esta variabilidad mensual podría deberse a factores geológicos o al momento del monitoreo.
+
+**Tsunami**
+
+*Estadísticos descriptivos*
+
+```{r}
+#| label: table tsunami
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+#Tsunami
+table(datos$tsunami)
+prop.table(table(datos$tsunami))
+```
+
+```{r}
+#| label: graf tsunami
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+barplot(table(datos$tsunami), main="Eventos con tsunami", col=c("#B5EAD7","#A7C7E7"))
+```
+
+*Análisis*: Del total de registros, aproximadamente el 39% de los eventos estuvieron acompañados por un tsunami (304 casos), mientras que el 61% no lo estuvieron (478 casos). Es decir, no todos los terremotos terminan en tsunamis, pero son suficientes para ser analizados.
+
+### Análisis enfocado en Tsunami
+
+**Tsunami vs Magnitude**
+
+*Boxplot y t.test*
+
+```{r}
+#| label: ts vs mag
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+##--MAGNITUDE VS TSUNAMI--#
+boxplot(magnitude ~ tsunami, data = datos, main="Magnitud vs Tsunami",col=c("#A7C7E7"))
+t.test(magnitude ~ tsunami, data = datos) 
+```
+
+*Análisis*: El test de Welch no detectó diferencias significativas en la magnitud promedio entre los eventos sísmicos que generaron tsunami y aquellos que no (p = 0.8931), lo que sugiere que la magnitud, por sí sola, no constituye un buen predictor de la ocurrencia de tsunamis.
+
+Esta conclusión se ve reforzada por el boxplot comparativo, donde ambas distribuciones presentan rangos similares, medianas prácticamente iguales y una dispersión homogénea.
+
+**Tsunami vs Depth**
+
+*Boxplot y t.test*
+
+```{r}
+#| label: ts vs depth
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+#con depth
+boxplot(depth ~ tsunami, data = datos, main="Profundidad vs Tsunami",col=c("#A7C7E7"))
+t.test(depth ~ tsunami, data = datos)
+```
+
+*Análisis*: Aunque los eventos con tsunami presentan una profundidad promedio ligeramente mayor, el test de Welch no detectó diferencias estadísticamente significativas entre ambos grupos (p = 0.1264). El boxplot confirma esto, mostrando mayor dispersión en el grupo con tsunami, pero sin una diferencia clara entre las distribuciones. Esto sugiere que la profundidad, si bien podría influir en ciertos casos, no constituye un factor determinante por sí sola en la ocurrencia de tsunamis.
+
+**Tsunami vs Latitude y Longitude**
+
+*Gráfico de dispersión*
+
+```{r}
+#| label: lat y long vs ts
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+#latitude y longitude
+library(ggplot2)
+ggplot(datos, aes(x=longitude, y=latitude, color=tsunami)) +
+  geom_point() +
+  labs(title="Epicentros con/sin tsunami")+
+  scale_color_manual(values = c("#B5EAD7", "blue"))
+
+```
+
+*Análisis*: El gráfico de dispersión de epicentros según latitud y longitud, diferenciado según su color por ocurrencia de tsunami, muestra la distribución geográfica de los eventos. Si bien no se observan agrupamientos claros, se ve que los eventos con tsunami tienden a ubicarse en zonas costeras o cercanas al ecuador. Esta visualización aporta contexto espacial que será complementado con mapas interactivos en secciones posteriores.
+
+**Tsunami vs NST**
+
+*Resumen estadístico y Boxplot*
+
+```{r}
+#| label: ts vs nst
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+
+#nst vs tsunami
+boxplot(nst ~ tsunami, data = datos, main = "Número de estaciones vs Tsunami", col=c("#A7C7E7"))
+
+
+
+datos %>%
+  group_by(tsunami) %>%
+  summarise(
+    Media = round(mean(nst, na.rm = TRUE), 1),
+    Mediana = median(nst, na.rm = TRUE),
+    Rango_IQ = IQR(nst, na.rm = TRUE),
+    Min = min(nst, na.rm = TRUE),
+    Max = max(nst, na.rm = TRUE),
+    N = n()
+  ) %>%
+  kable(caption = "Resumen estadístico del número de estaciones por grupo de tsunami") %>%
+  kable_styling(full_width = FALSE)
+
+```
+
+*Análisis*: El número de estaciones que registraron los eventos muestra una diferencia marcada entre los grupos. Los sismos sin tsunami presentan mayor cobertura instrumental, mientras que los eventos con tsunami tienden a ocurrir en zonas con menor densidad de estaciones. Esta diferencia podría estar asociada a la localización geográfica de los epicentros. La tabla comparativa refuerza la diferencia observada en el boxplot: los eventos con tsunami presentan una cobertura instrumental significativamente menor, con una mediana de estaciones igual a cero. Esto sugiere que estos eventos ocurren con frecuencia en zonas alejadas de redes sísmicas densas, como regiones oceánicas, lo que podría dificultar su detección temprana y contribuir a su peligrosidad.
+
+**Tsunami vs DMIN**
+
+*Resumen estadístico y Boxplot*
+
+```{r}
+#| label: ts vs dmin
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+#dmin vs tsunami
+boxplot(dmin ~ tsunami, data = datos, main = "Distancia mínima vs Tsunami",col=c("#B5EAD7","#A7C7E7"))
+
+# Tabla descriptiva de dmin según tsunami
+tabla_dmin <- datos %>%
+  group_by(tsunami) %>%
+  summarise(
+    Media = round(mean(dmin, na.rm = TRUE), 1),
+    Mediana = round(median(dmin, na.rm = TRUE), 1),
+    IQR = round(IQR(dmin, na.rm = TRUE), 1)
+  )
+
+# Mostrar tabla en formato markdown
+kable(tabla_dmin, caption = "Estadísticas descriptivas de la distancia mínima (dmin) según presencia de tsunami")
+
+```
+
+*Análisis*: En los eventos sísmicos que generaron tsunamis se observa, en promedio, una mayor distancia mínima respecto a las estaciones sísmicas en comparación con aquellos que no generan tsunamis. Esta diferencia aparece tanto en la media como en la mediana y se acompaña de una mayor dispersión (IQR), lo que indica que estos eventos tienden a localizarse en zonas más remotas y heterogéneas. Tal comportamiento puede estar relacionado con su ocurrencia en áreas oceánicas con menor densidad de monitoreo, lo cual reduce la precisión del registro instrumental.
+
+**Tsunami vs GAP**
+
+*Resumen estadístico y Boxplot*
+
+```{r}
+#| label: ts vs gap
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+#gap vs tsunami
+boxplot(gap ~ tsunami, data = datos, main = "Azimuthal gap vs Tsunami",col=c("#A7C7E7"))
+
+# Tabla descriptiva de gap según tsunami
+tabla_gap <- datos %>%
+  group_by(tsunami) %>%
+  summarise(
+    Media = round(mean(gap, na.rm = TRUE), 1),
+    Mediana = round(median(gap, na.rm = TRUE), 1),
+    IQR = round(IQR(gap, na.rm = TRUE), 1)
+  )
+
+# Mostrar tabla en formato markdown
+kable(tabla_gap, caption = "Estadísticas descriptivas del azimuthal gap según presencia de tsunami")
+
+
+```
+
+*Análisis*: Los eventos que generaron tsunamis presentan, en promedio, valores más altos de azimuthal gap que los no asociados. Esta diferencia se refleja tanto en la media como en la mediana, y también en el rango intercuartílico, lo que indica una mayor dispersión. Esto sugiere que los eventos con tsunami tienden a ocurrir en zonas con menor cobertura angular de estaciones sísmicas, posiblemente en regiones oceánicas o lejanas. Esto aporta información sobre la calidad del registro instrumental, que es importante para interpretar los datos con mejor contexto.
+
+**Tsunami vs SIG**
+
+*Resumen estadístico y t.test*
+
+```{r}
+#| label: ts vs sig
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+#con sig
+boxplot(sig ~ tsunami, data = datos, main="Significancia vs Tsunami",col=c("#A7C7E7"))
+t.test(sig ~ tsunami, data = datos)
+#“El test de Welch comparando la significancia de los sismos con 
+#y sin tsunami mostró que las medias fueron muy similares (874 vs 864), y 
+#la diferencia no resultó estadísticamente significativa (p = 0.66). 
+#Esto sugiere que la variable sig, tal como está definida en el dataset, 
+#no discrimina entre eventos con y sin tsunami.”
+```
+
+*Análisis*: Según el test de Welch, no se observa una diferencia estadísticamente significativa en los valores de significancia (sig) entre los eventos con y sin tsunami (p = 0.66). Las medias son similares (874.1 para eventos sin tsunami y 863.8 para los con), y el intervalo de confianza incluye el cero, lo que refuerza la idea de que no hay evidencia suficiente para afirmar que el comportamiento de sig varía según la presencia de tsunami. Esto sugiere que esta variable no estaría aportando información relevante para diferenciar ambos tipos de eventos en este contexto.
+
+**Tsunami vs CDI**
+
+*Chi cuadrado y gráfico de barras*
+
+```{r}
+#| label: ts vs cdi
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+#cdi
+
+ggplot(datos, aes(x = as.factor(cdi), fill = tsunami)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Distribución de CDI según presencia de tsunami",
+       x = "CDI (Intensidad percibida)",
+       y = "Frecuencia",
+       fill = "Tsunami") +
+  scale_fill_manual(values = c("#B5EAD7", "#A7C7E7"))+
+  theme_minimal()
+chisq.test(table(datos$cdi, datos$tsunami))
+
+table(datos$cdi, datos$tsunami)
+
+```
+
+*Análisis*: La distribución de los niveles de intensidad percibida (CDI) varía según la presencia de tsunami. Mientras que los eventos sin tsunami se concentran en niveles bajos (especialmente en CDI 0), los eventos con tsunami muestran una mayor frecuencia en niveles intermedios y altos. Esta diferencia fue confirmada estadísticamente mediante el test de Chi-cuadrado (X² = 68.77, p \< 0.001), lo que indica una asociación significativa entre la intensidad percibida y la ocurrencia de tsunamis.
+
+**Tsunami vs MMI**
+
+*Chi cuadrado y gráfico de barras*
+
+```{r}
+#| label: ts vs mmi
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+
+ggplot(datos, aes(x = as.factor(mmi), fill = tsunami)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Distribución de MMI según presencia de tsunami",
+       x = "MMI (Intensidad instrumental)",
+       y = "Frecuencia",
+       fill = "Tsunami") +
+  scale_fill_manual(values = c("#B5EAD7", "#A7C7E7"))+
+  theme_minimal()
+chisq.test(table(datos$mmi, datos$tsunami))
+
+table(datos$tsunami, datos$mmi)
+
+```
+
+*Análisis*: La distribución de la intensidad instrumental (MMI) muestra diferencias marcadas según la presencia de tsunami. Los eventos sin tsunami se concentran en niveles altos (especialmente MMI 6 y 7), mientras que los eventos con tsunami presentan una distribución más repartida, con mayor frecuencia en niveles intermedios. El test de Chi-cuadrado confirma esta diferencia (X² = 28.76, p \< 0.001), lo que indica una asociación significativa entre MMI y la ocurrencia de tsunamis. Esto sugiere que, si bien los tsunamis pueden estar presentes en eventos intensos, también se vinculan con sismos de menor intensidad, probablemente por su localización o características específicas.
+
+**Tsunami vs Year**
+
+*Tabla y gráfico de barras*
+
+```{r}
+#| label: ts vs year
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+#year
+ggplot(datos, aes(x = as.factor(Year), fill = as.factor(tsunami))) +
+  geom_bar(position = "stack") +
+  labs(title = "Eventos sísmicos por año (con/sin tsunami)",
+       x = "Año",
+       y = "Cantidad de eventos",
+       fill = "Tsunami") +
+  scale_fill_manual(values = c("#B5EAD7", "#A7C7E7"))+
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+table(datos$Year, datos$tsunami)
+
+```
+
+*Análisis*: A partir del año 2013 se observa un cambio claro en la distribución de eventos sísmicos con respecto a la presencia de tsunamis. Entre 2001 y 2012, todos los eventos registrados fueron sin tsunami. A partir de 2013, los eventos con tsunami aparecen y en varios años superan en cantidad a los eventos sin tsunami (por ejemplo, en 2014, 2018 y 2021). Este cambio podría reflejar una mejora en la capacidad de detección, una modificación en los criterios de clasificación o un patrón geofísico que debería ser analizado.
+
+## Mapa Geográfico
+
+A continuación se presenta un mapa interactivo que permite visualizar la distribución espacial de los eventos sísmicos registrados.
+
+En él, el tamaño de cada marcador representa la magnitud del evento, el color de borde indica si estuvo o no asociado a un tsunami, y el color de relleno refleja la profundidad. Esta visualización permite integrar múltiples variables en un solo plano, facilitando la interpretación geográfica de los patrones observados.
+
+Al analizarlo, se reafirma lo observado previamente: los eventos con tsunami tienden a ubicarse en zonas más profundas y alejadas, lo que se vincula con una menor cobertura instrumental y una mayor distancia a estaciones sísmicas.
+
+**Mapa eventos con tsunami**
+
+```{r}
+#| label: mapa
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+datos_tsunami <- datos %>% filter(tsunami == "Sí")
+
+# Crear paleta de colores según profundidad
+paleta <- colorNumeric(
+  palette = "YlOrRd",   # escala tipo heatmap (amarillo → rojo)
+  domain = datos_tsunami$depth
+)
+
+# Texto para mostrar al pasar el cursor
+textos <- paste0(
+  "<b>Magnitud:</b> ", datos_tsunami$magnitude, "<br>",
+  "<b>Profundidad:</b> ", datos_tsunami$depth, " km<br>",
+  "<b>CDI:</b> ", datos_tsunami$cdi, "<br>",
+  "<b>MMI:</b> ", datos_tsunami$mmi
+)
+
+# Mapa
+leaflet(datos_tsunami) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~longitude,
+    lat = ~latitude,
+    radius = 7,
+    fillColor = ~paleta(depth),   # color según profundidad
+    color = "white",              # borde blanco
+    weight = 2,
+    stroke = TRUE,
+    fillOpacity = 0.9,
+    label = lapply(textos, HTML)  # aparece al pasar el cursor
+  ) %>%
+  addLegend(
+    "bottomright",
+    pal = paleta,
+    values = ~depth,
+    title = "Profundidad (km)"
+  )
+
+
+
+```
+
+Observando este mapa se refuerzan algunos conceptos observados anteriormente.
+
+## Conclusión
+
+El mapa permite visualizar la distribución espacial de los eventos sísmicos que estuvieron acompañados por tsunamis, destacando su concentración en zonas costeras y regiones cercanas al ecuador. Esta localización refuerza la idea de que la ocurrencia de tsunamis está vinculada a contextos geográficos específicos, más que a características individuales del sismo.
+
+Al analizar los datos, no se encontraron diferencias relevantes en la *magnitud* entre los eventos que generaron tsunami y aquellos que no. Esto indica que la magnitud, por sí sola, no resulta un buen indicador para anticipar la ocurrencia de un tsunami. La *profundidad* que se observa con colores más fuertes en caso de ser mayor y menos fuertes cuando es menor, aunque en promedio es mayor en eventos con tsunami, tampoco mostró diferencias estadísticamente significativas, por lo que podría influir pero no resulta determinante. En cambio, sí se evidencian diferencias en las intensidades: los eventos con tsunami presentan mayores niveles de *CDI*, lo que indica una percepción más intensa por parte de la población, mientras que los valores de *MMI* tienden a ser más altos en eventos sin tsunami, lo que sugiere que los tsunamis pueden estar presentes incluso en sismos de menor intensidad instrumental, posiblemente por su ubicación o características particular.
+
+Este mapa, al enfocarse únicamente en los eventos con tsunami, permite destacar sus patrones geográficos y reforzar las conclusiones previas.

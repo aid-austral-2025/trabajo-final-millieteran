@@ -15,7 +15,6 @@ El trabajo está desarrollado en **QUARTO_AID** (.qmd), con visualizaciones de g
 ## Uso
 Abrir "QUARTO_AID.qmd" en RStudio y renderizar el documento con Quarto.  
 Se requieren los paquetes: "readr", "dplyr", "ggplot2", "leaflet", "sf","leaflet.extras".
-En "QUARTO_AID.qmd", en el sector de Carga del dataset, hay una línea de código para instalar los paquetes. De ser necesario, descomentar dicha lína y correr el código. 
 
 ---
 El detalle metodológico y las conclusiones completas se encuentran en el informe principal.

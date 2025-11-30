@@ -27,9 +27,6 @@ Los pasos que se siguieron fueron los siguientes:
 #| include: false
 #| paged-print: false
 
-# Si no se tiene estos paquetes instalados, descomentá la línea de abajo:
-# install.packages(c("readr", "dplyr", "ggplot2", "leaflet", "sf","leaflet.extras"))
-
 # Carga de librerías necesarias
 library(readr)
 library(dplyr)
